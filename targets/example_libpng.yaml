@@ -1,0 +1,17 @@
+name: libpng
+version: "1.6.40"
+source:
+  type: git
+  url: https://github.com/pnggroup/libpng.git
+  ref: v1.6.40
+language: c
+description: >
+  Official PNG reference library. Widely used for PNG decoding/encoding
+  across countless applications and embedded systems.
+attack_surface_hint: >
+  Focus on PNG chunk parsing (IHDR, IDAT, ancillary chunks), zlib
+  decompression, palette handling, interlacing, and memory management
+  in png_read_info / png_read_image paths.
+build_hint: >
+  cmake -B build -DPNG_TESTS=ON -DCMAKE_BUILD_TYPE=Debug &&
+  cmake --build build -j$(nproc)

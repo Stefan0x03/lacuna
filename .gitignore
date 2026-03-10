@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# Distribution / packaging
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Secrets
+.env
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Scan workspace — contents are staged at runtime, not committed
+workspace/*
+!workspace/.gitkeep
+
+# Generated reports — not committed
+reports/*
+!reports/.gitkeep
+
+# OS noise
+.DS_Store
+Thumbs.db

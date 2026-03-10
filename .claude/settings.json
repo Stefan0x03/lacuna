@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport json, sys, subprocess, os\ndata = json.load(sys.stdin)\nfp = data.get('tool_input', {}).get('file_path', '')\nif not fp.endswith('.py'):\n    sys.exit(0)\ncwd = data.get('cwd', '')\nvenv_bin = os.path.join(cwd, '.venv', 'bin')\nruff = os.path.join(venv_bin, 'ruff')\nmypy = os.path.join(venv_bin, 'mypy')\nprint(f'[hook] ruff: {fp}', flush=True)\nr1 = subprocess.run([ruff, 'check', fp, '--fix'], capture_output=True, text=True)\nr2 = subprocess.run([ruff, 'format', fp], capture_output=True, text=True)\nprint(f'[hook] mypy: {fp}', flush=True)\nr3 = subprocess.run([mypy, fp, '--ignore-missing-imports'], capture_output=True, text=True)\nout = '\\n'.join(filter(None, [r1.stdout.strip(), r1.stderr.strip(), r2.stderr.strip(), r3.stdout.strip(), r3.stderr.strip()]))\nif out:\n    print(out, flush=True)\nif r1.returncode != 0 or r3.returncode != 0:\n    sys.exit(1)\n\""
+          }
+        ]
+      }
+    ]
+  }
+}

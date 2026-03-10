@@ -1,0 +1,9 @@
+name: tiny
+version: "1.0"
+language: c
+source:
+  type: local
+  path: workspace_src/tiny
+description: "Tiny C library with intentional vulnerabilities for smoke testing."
+attack_surface_hint: "Public API in tiny.h. Entry points: parse_input(), format_output(), resize_buffer()."
+build_hint: "gcc -o tiny *.c or clang -o tiny *.c"

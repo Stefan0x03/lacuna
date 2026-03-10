@@ -1,0 +1,19 @@
+name: openssl
+version: "3.2.0"
+source:
+  type: git
+  url: https://github.com/openssl/openssl.git
+  ref: openssl-3.2.0
+language: c
+description: >
+  OpenSSL cryptography and TLS toolkit. Critical library underpinning
+  TLS/SSL across servers, browsers, and embedded devices.
+attack_surface_hint: >
+  Focus on ASN.1 / DER parsing (crypto/asn1/), X.509 certificate
+  verification, BN arithmetic edge cases, PKCS#7/CMS, and protocol
+  state machine transitions in ssl/statem/. Historical vuln patterns
+  include buffer overflows in BIO, integer overflows in BN_*, and
+  use-after-free in SSL session handling.
+build_hint: >
+  ./Configure --debug no-shared linux-x86_64 &&
+  make -j$(nproc)
