@@ -39,6 +39,7 @@ class ScanConfig:
     reports_dir: Path = field(default_factory=lambda: Path("reports"))
     workspace_dir: Path = field(default_factory=lambda: Path("workspace"))
     timeout_per_tool: int = 30
+    inter_turn_delay: float = 0.0
     verbose: bool = False
 
 
@@ -98,5 +99,6 @@ def load_config(target_yaml: Path, **overrides: object) -> ScanConfig:
         reports_dir=reports_dir,
         workspace_dir=workspace_dir,
         timeout_per_tool=int(overrides.get("timeout_per_tool") or 30),
+        inter_turn_delay=float(overrides.get("inter_turn_delay") or 0.0),
         verbose=bool(overrides.get("verbose", False)),
     )

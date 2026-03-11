@@ -15,5 +15,7 @@ attack_surface_hint: >
   include buffer overflows in BIO, integer overflows in BN_*, and
   use-after-free in SSL session handling.
 build_hint: >
-  ./Configure --debug no-shared linux-x86_64 &&
-  make -j$(nproc)
+  Step 1 (configure, ~5s): ./Configure --debug no-shared linux-x86_64
+  Step 2 (build, ~5 min): make -j$(nproc)
+  Run each step as a separate bash call. The build takes several minutes —
+  use --timeout-per-tool 600 when invoking lacuna scan.

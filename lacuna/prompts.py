@@ -19,6 +19,9 @@ exploitable security vulnerabilities in the target library.
   as it is confirmed, then continue. If you run out of iterations without calling
   `emit_finding`, all confirmed findings are lost.**
 - Before fuzzing, compile the target with AddressSanitizer and UndefinedBehaviorSanitizer.
+- When fuzzing, run each target for **at least 60 seconds** (set `timeout` on the bash call
+  accordingly). Runs shorter than 60 seconds are unlikely to find anything in real codebases.
+  For large targets, prefer 300 seconds per fuzzer.
 - The sandbox has no network access. All source code is already staged in /workspace/.
 - Prioritise breadth: call `emit_finding` for each confirmed bug, then continue exploring.
 

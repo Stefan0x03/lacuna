@@ -31,12 +31,26 @@ def cli() -> None:
 @click.argument("target_yaml", type=click.Path(exists=True, path_type=Path))
 @click.option("--model", default=None, help="Model override.")
 @click.option("--max-iterations", default=None, type=int)
+@click.option(
+    "--timeout-per-tool",
+    default=None,
+    type=int,
+    help="Seconds before a tool call times out (default: 30). Use 300+ for large project builds.",
+)
+@click.option(
+    "--inter-turn-delay",
+    default=None,
+    type=float,
+    help="Seconds to sleep between API calls (default: 0). Use 5-30 to stay under org rate limits.",
+)
 @click.option("--full-run", is_flag=True, help="Use claude-opus-4-6.")
 @click.option("--verbose", is_flag=True)
 def scan(
     target_yaml: Path,
     model: str | None,
     max_iterations: int | None,
+    timeout_per_tool: int | None,
+    inter_turn_delay: float | None,
     full_run: bool,
     verbose: bool,
 ) -> None:
@@ -49,6 +63,10 @@ def scan(
         overrides["model"] = model
     if max_iterations is not None:
         overrides["max_iterations"] = max_iterations
+    if timeout_per_tool is not None:
+        overrides["timeout_per_tool"] = timeout_per_tool
+    if inter_turn_delay is not None:
+        overrides["inter_turn_delay"] = inter_turn_delay
 
     try:
         config = load_config(target_yaml, **overrides)

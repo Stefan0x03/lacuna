@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from dataclasses import dataclass
 
 import anthropic
@@ -23,17 +24,75 @@ class ScanResult:
     model: str
 
 
+# How many times the agent loop itself retries after a rate-limit before giving up.
+# Each wait doubles: 60s → 120s → 240s (capped at 600s).
+_RATE_LIMIT_RETRIES = 3
+_RATE_LIMIT_BASE_WAIT = 60  # seconds
+
+
 class VulnerabilityAgent:
     def __init__(self, config: ScanConfig, sandbox: DockerSandbox) -> None:
         self._config = config
         self._sandbox = sandbox
-        self._client = anthropic.Anthropic()
+        # max_retries=2 (SDK default): handles genuine transient blips (<1s).
+        # We do NOT rely on the SDK for sustained rate limits because the SDK's
+        # _calculate_retry_timeout caps retry-after at 60s — any Retry-After
+        # header longer than 60s is silently ignored and the SDK falls back to
+        # its 8s max exponential backoff, exhausting retries in ~15s total.
+        # Agent-level retries below handle sustained org-level limits correctly.
+        self._client = anthropic.Anthropic(max_retries=2)
         self._findings: list[Finding] = []
         self._tool_registry = build_tool_registry(
             sandbox=sandbox,
             findings=self._findings,
             timeout=config.timeout_per_tool,
         )
+
+    def _call_api(
+        self,
+        messages: list[dict],
+        system: str,
+        tool_defs: list[dict],
+    ) -> anthropic.types.Message:
+        """Call the API with agent-level rate-limit retry (long waits, respects Retry-After)."""
+        wait = _RATE_LIMIT_BASE_WAIT
+        for attempt in range(_RATE_LIMIT_RETRIES + 1):
+            try:
+                return self._client.messages.create(
+                    model=self._config.model,
+                    max_tokens=self._config.max_tokens,
+                    system=system,
+                    messages=messages,
+                    tools=tool_defs,
+                )
+            except anthropic.RateLimitError as e:
+                if attempt >= _RATE_LIMIT_RETRIES:
+                    raise
+                # Respect Retry-After without the SDK's 60s cap.
+                try:
+                    resp = getattr(e, "response", None)
+                    if resp is not None:
+                        header = resp.headers.get("retry-after") or resp.headers.get(
+                            "retry-after-ms"
+                        )
+                        if header:
+                            parsed = float(header)
+                            # retry-after-ms is in milliseconds
+                            if resp.headers.get("retry-after-ms"):
+                                parsed /= 1000
+                            wait = max(parsed, _RATE_LIMIT_BASE_WAIT)
+                except (TypeError, ValueError):
+                    pass
+                wait = min(wait, 600)  # never wait more than 10 minutes
+                print(
+                    f"[lacuna] Rate limited — waiting {wait:.0f}s "
+                    f"(attempt {attempt + 1}/{_RATE_LIMIT_RETRIES})...",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
+                wait = min(wait * 2, 600)
+
+        raise RuntimeError("unreachable")  # loop always returns or raises
 
     def scan(self) -> ScanResult:
         """Run the vulnerability scan and return a ScanResult."""
@@ -54,18 +113,21 @@ class VulnerabilityAgent:
         iterations = 0
 
         while iterations < self._config.max_iterations:
+            if iterations > 0 and self._config.inter_turn_delay > 0:
+                time.sleep(self._config.inter_turn_delay)
+
             iterations += 1
 
             messages = trim_messages(messages, max_input_tokens=180_000)
 
             try:
-                response = self._client.messages.create(
-                    model=self._config.model,
-                    max_tokens=self._config.max_tokens,
-                    system=system,
-                    messages=messages,
-                    tools=tool_defs,
+                response = self._call_api(messages, system, tool_defs)
+            except anthropic.RateLimitError as e:
+                print(
+                    f"[lacuna] Rate limit: all {_RATE_LIMIT_RETRIES} waits exhausted: {e}",
+                    file=sys.stderr,
                 )
+                break
             except anthropic.APIError as e:
                 print(f"[lacuna] API error: {e}", file=sys.stderr)
                 break

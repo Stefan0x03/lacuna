@@ -1,0 +1,30 @@
+name: zlib
+version: "1.2.11"
+language: c
+source:
+  type: git
+  url: https://github.com/madler/zlib.git
+  ref: v1.2.11
+description: >
+  zlib 1.2.11 — widely-used data compression library implementing the
+  DEFLATE algorithm. Used in virtually every OS, browser, and language
+  runtime for gzip/zlib/png/zip compression.
+attack_surface_hint: >
+  Focus on inflate.c and infback.c (decompression). Entry points:
+  inflate(), inflateGetHeader(), inflateBack(), gzread(), gzopen().
+  Pay close attention to how gzip headers, extra fields, and
+  compressed data lengths are parsed and validated. The decompression
+  path processes attacker-controlled byte streams and performs many
+  length calculations — look for integer arithmetic on header fields
+  before memory operations.
+build_hint: >
+  All source lives in the top-level directory. Build with:
+    gcc -fsanitize=address,undefined -g -O1 -o zlib_test \
+        adler32.c compress.c crc32.c deflate.c gzclose.c gzlib.c \
+        gzread.c gzwrite.c infback.c inffast.c inflate.c inftrees.c \
+        trees.c uncompr.c zutil.c -lz 2>/dev/null || \
+    gcc -fsanitize=address,undefined -g -O1 *.c -o zlib_test
+  Or use the configure script:
+    ./configure && make -j$(nproc)
+  To fuzz the inflate path, write a small harness that calls
+  inflate() / inflateGetHeader() on arbitrary input from stdin.
