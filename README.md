@@ -99,6 +99,7 @@ lacuna report <scan-id>     Re-render a report from a saved messages JSON
 | `--max-iterations INT` | `50` | Max agent iterations |
 | `--full-run` | off | Use `claude-opus-4-6` (expensive, thorough) |
 | `--verbose` | off | Stream every tool call/result to terminal |
+| `--budget-awareness` | off | Inject remaining-iterations reminders into the agent's conversation |
 
 ---
 
@@ -118,6 +119,14 @@ build_hint: "cmake -DPNG_TESTS=OFF . && make"
 ```
 
 For local sources (`type: local`), put the source tree under `workspace_src/` and set `path: workspace_src/<dir>`. See `targets/test_tiny.yaml` for a working example.
+
+The bundled `workspace_src/tiny/` library is an intentionally vulnerable C target used for smoke testing. A correct scan should identify all three deliberate vulnerabilities:
+
+| Function | Vulnerability |
+|---|---|
+| `parse_input()` | Stack buffer overflow — `strcpy` into a 64-byte stack buffer with no bounds check |
+| `format_output()` | Format string vulnerability — caller-supplied string passed directly to `snprintf` as the format argument |
+| `resize_buffer()` | Integer overflow — `n * elem_size` wraps on large inputs, causing `malloc` to allocate a far smaller buffer than expected |
 
 ---
 

@@ -96,10 +96,7 @@ def _stage_tarball(spec: TargetSpec, dst: Path) -> None:
 
         # Find the extracted root (usually a single top-level directory)
         entries = list(extract_dir.iterdir())
-        if len(entries) == 1 and entries[0].is_dir():
-            extracted_root = entries[0]
-        else:
-            extracted_root = extract_dir
+        extracted_root = entries[0] if len(entries) == 1 and entries[0].is_dir() else extract_dir
 
         if dst.exists():
             shutil.rmtree(dst)

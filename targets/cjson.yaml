@@ -1,0 +1,17 @@
+name: cjson
+version: "1.7.12"
+source:
+  type: git
+  url: https://github.com/DaveGamble/cJSON.git
+  ref: v1.7.12
+language: c
+description: >
+  Ultralightweight JSON parser in ANSI C. Single-file library used in
+  embedded systems and IoT firmware worldwide.
+attack_surface_hint: >
+  Focus on cJSON_Parse() and cJSON_ParseWithLength(). Look for integer
+  overflows in string/array length calculations, unbounded recursion on
+  deeply nested JSON, and use-after-free in cJSON_Delete(). Also check
+  cJSON_Print() and cJSON_PrintUnformatted() for output buffer issues.
+build_hint: >
+  mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Debug && make -j$(nproc)

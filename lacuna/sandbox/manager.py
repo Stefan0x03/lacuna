@@ -81,7 +81,7 @@ class DockerSandbox:
         try:
             container = self._client.containers.get(self._name)
         except docker.errors.NotFound:
-            raise RuntimeError("sandbox not running")
+            raise RuntimeError("sandbox not running") from None
 
         result_holder: list[tuple[int, tuple[bytes | None, bytes | None]]] = []
         exc_holder: list[Exception] = []
@@ -123,7 +123,7 @@ class DockerSandbox:
         try:
             container = self._client.containers.get(self._name)
         except docker.errors.NotFound:
-            raise RuntimeError("sandbox not running")
+            raise RuntimeError("sandbox not running") from None
 
         dst_path = dst_in_container.rstrip("/")
         dst_dir = dst_path.rsplit("/", 1)[0] if "/" in dst_path else "/"

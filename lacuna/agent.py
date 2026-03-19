@@ -24,6 +24,22 @@ class ScanResult:
     model: str
 
 
+def _budget_text(remaining: int, max_iterations: int) -> str:
+    if remaining <= max(10, max_iterations // 5):
+        urgency = (
+            " Prioritise calling `emit_finding` for any confirmed vulnerabilities"
+            " and then `end_turn`. Do not start new investigations."
+        )
+    elif remaining <= max_iterations // 2:
+        urgency = (
+            " Prioritise breadth over depth —"
+            " avoid spending multiple iterations on a single function or hypothesis."
+        )
+    else:
+        urgency = ""
+    return f"[System: {remaining} of {max_iterations} iterations remaining.{urgency}]"
+
+
 # How many times the agent loop itself retries after a rate-limit before giving up.
 # Each wait doubles: 60s → 120s → 240s (capped at 600s).
 _RATE_LIMIT_RETRIES = 3
@@ -164,6 +180,16 @@ class VulnerabilityAgent:
                     prefix = "ERROR: " if result.is_error else ""
                     print(f"[tool_result] {prefix}{result.content[:300]}")
                 tool_results.append(result.to_api_dict(block.id))
+
+            if self._config.budget_awareness:
+                remaining = self._config.max_iterations - iterations
+                if remaining > 0:
+                    tool_results.append(
+                        {
+                            "type": "text",
+                            "text": _budget_text(remaining, self._config.max_iterations),
+                        }
+                    )
 
             messages.append({"role": "user", "content": tool_results})
 

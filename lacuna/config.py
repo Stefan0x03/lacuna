@@ -41,6 +41,7 @@ class ScanConfig:
     timeout_per_tool: int = 30
     inter_turn_delay: float = 0.0
     verbose: bool = False
+    budget_awareness: bool = False
 
 
 def load_target_spec(path: Path) -> TargetSpec:
@@ -101,4 +102,5 @@ def load_config(target_yaml: Path, **overrides: object) -> ScanConfig:
         timeout_per_tool=int(overrides.get("timeout_per_tool") or 30),
         inter_turn_delay=float(overrides.get("inter_turn_delay") or 0.0),
         verbose=bool(overrides.get("verbose", False)),
+        budget_awareness=bool(overrides.get("budget_awareness", False)),
     )

@@ -45,6 +45,11 @@ def cli() -> None:
 )
 @click.option("--full-run", is_flag=True, help="Use claude-opus-4-6.")
 @click.option("--verbose", is_flag=True)
+@click.option(
+    "--budget-awareness",
+    is_flag=True,
+    help="Inject remaining iteration count into each tool result turn.",
+)
 def scan(
     target_yaml: Path,
     model: str | None,
@@ -53,12 +58,13 @@ def scan(
     inter_turn_delay: float | None,
     full_run: bool,
     verbose: bool,
+    budget_awareness: bool,
 ) -> None:
     """Run a vulnerability scan."""
     if full_run:
         model = "claude-opus-4-6"
 
-    overrides: dict = {"verbose": verbose}
+    overrides: dict = {"verbose": verbose, "budget_awareness": budget_awareness}
     if model is not None:
         overrides["model"] = model
     if max_iterations is not None:
