@@ -100,6 +100,7 @@ def scan(
             result.iterations,
             config.reports_dir,
             stem=stem,
+            target_description=config.target_spec.description,
         )
         json_path = write_messages_json(result.messages, config.reports_dir, stem)
 

@@ -31,12 +31,15 @@ def render_markdown(
     input_tokens: int,
     output_tokens: int,
     iterations: int,
+    target_description: str = "",
 ) -> str:
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     cost = estimate_cost(model, input_tokens, output_tokens)
 
     lines = [
-        f"# Lacuna Vulnerability Report — {target_name}",
+        f"# Lacuna PoC Report — {target_name}"
+        if target_description
+        else f"# Lacuna Vulnerability Report — {target_name}",
         "",
         f"Generated: {ts}",
         "",
@@ -44,6 +47,12 @@ def render_markdown(
         f"Tokens: {input_tokens:,} in / {output_tokens:,} out | "
         f"Est. cost: ${cost:.4f}",
         "",
+    ]
+
+    if target_description:
+        lines += [f"**Vulnerability**: {target_description}", ""]
+
+    lines += [
         "---",
         "",
         "## Summary",
@@ -74,6 +83,9 @@ def render_markdown(
                 lines.append(f"**Location**: {finding.location}")
                 lines.append("")
             lines.append(finding.description)
+            if finding.poc_file:
+                lines.append("")
+                lines.append(f"**PoC**: `{finding.poc_file}`")
             if finding.recommendation:
                 lines.append("")
                 lines.append(f"**Recommendation**: {finding.recommendation}")
@@ -98,6 +110,7 @@ def write_report(
     reports_dir: Path,
     *,
     stem: str | None = None,
+    target_description: str = "",
 ) -> Path:
     reports_dir.mkdir(parents=True, exist_ok=True)
     if stem is None:
@@ -105,7 +118,9 @@ def write_report(
     path = reports_dir / f"{stem}.md"
     if path.exists():
         path = reports_dir / f"{stem}_1.md"
-    content = render_markdown(target_name, findings, model, input_tokens, output_tokens, iterations)
+    content = render_markdown(
+        target_name, findings, model, input_tokens, output_tokens, iterations, target_description
+    )
     path.write_text(content, encoding="utf-8")
     return path
 
@@ -146,6 +161,7 @@ def extract_findings_from_messages(messages: list[dict]) -> list[Finding]:
                     location=inp.get("location", ""),
                     recommendation=inp.get("recommendation", ""),
                     cwe=inp.get("cwe", ""),
+                    poc_file=inp.get("poc_file", ""),
                 )
             )
     return findings

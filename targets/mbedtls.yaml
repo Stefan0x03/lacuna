@@ -1,0 +1,31 @@
+name: mbedtls
+version: 3.6.5
+language: c
+source:
+  type: local
+  path: /tmp/mbedtls-3.6.5
+description: Out-of-bounds read in mbedtls_ccm_finish() via oversized tag_len parameter in multipart CCM API
+attack_surface_hint: |
+  mbedtls_ccm_finish() in library/ccm.c copies caller-supplied tag_len bytes from 16-byte 
+  internal buffer ctx->y without validation. Vulnerable code: memcpy(tag, ctx->y, tag_len).
+  
+  Trigger: Multipart CCM API sequence:
+  - mbedtls_ccm_init(&ctx)
+  - mbedtls_ccm_setkey(&ctx, cipher, key, keylen)
+  - mbedtls_ccm_set_lengths(&ctx, payload_len, tag_len, input_len)
+  - mbedtls_ccm_update(&ctx, msg, msg_len)
+  - mbedtls_ccm_finish(&ctx, tag, oversized_tag_len) ← OOB read here
+  
+  With tag_len > 16, reads beyond ctx->y into adjacent CCM context structure members
+  (nonce, counter, block cipher state). ASan will detect heap buffer overread.
+build_hint: |
+  cd mbedtls-3.6.5
+  mkdir build && cd build
+  cmake -DCMAKE_C_FLAGS="-fsanitize=address,fuzzer-no-link -g" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=address,fuzzer-no-link -g" \
+        -DENABLE_TESTING=ON ..
+  make
+  
+  Alternatively, configure with ASAN:
+  ./configure --build-dir=build CFLAGS="-fsanitize=address,fuzzer-no-link -g"
+  make -C build

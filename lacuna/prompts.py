@@ -2,13 +2,28 @@ from __future__ import annotations
 
 from lacuna.config import TargetSpec
 
+_POC_MODE_RULES = """\
+## Rules
+- Always use the `think` tool to reason before taking action. Keep `think` calls brief
+  (3–5 sentences). Do not write out execution plans in full — just note the next step.
+- **Your goal is a working PoC, not a survey.** Stay focused on the target vulnerability
+  described in the attack surface hint. Do not report unrelated bugs you encounter.
+- **Call `emit_finding` as soon as the PoC reproduces the crash.** Include the sandbox path
+  to the PoC file in the `poc_file` field. Do not defer — if you run out of iterations
+  without calling `emit_finding`, the confirmed reproduction is lost.
+- Write the PoC as a standalone C/C++ file (e.g. `/workspace/poc.c`). It must compile and
+  crash with AddressSanitizer when run against the vulnerable version.
+- Build the target using the exact steps in the build hint. Use ASAN and UBSAN flags as
+  specified. Do not invent build steps — follow the hint, then debug if the build fails.
+- After reproducing the crash, record the exact ASAN output in the finding description.
+- **Batch independent operations into a single response** to conserve your iteration budget.
+  Writing the PoC with `write_file`, compiling with `bash`, and running with `bash` are
+  independent of each other once the build is ready — issue as many non-dependent calls
+  as possible per response.
+- The sandbox has no network access. All source code is already staged in /workspace/.
+"""
 
-def build_system_prompt(target: TargetSpec) -> str:
-    """Return the static system prompt with an optional language-specific hint block."""
-    prompt = """\
-You are an autonomous C/C++ vulnerability scanner. Your mission is to find real,
-exploitable security vulnerabilities in the target library.
-
+_DISCOVERY_MODE_RULES = """\
 ## Rules
 - Always use the `think` tool to reason before taking action. Keep `think` calls brief
   (3–5 sentences). Do not write out execution plans in full — just note the next step.
@@ -38,7 +53,9 @@ exploitable security vulnerabilities in the target library.
   For example, the fuzzing setup sequence — writing a harness with `write_file`, creating a
   corpus directory with `bash`, and compiling with `compile` — can all be issued in the same
   response. Do not issue one tool call and wait when multiple calls have no dependencies.
+"""
 
+_SEVERITY_GUIDE = """\
 ## Severity Guide
 - **critical**: Remote code execution, memory corruption exploitable without user interaction.
 - **high**: Exploitable memory corruption, significant privilege escalation, denial of service
@@ -46,15 +63,24 @@ exploitable security vulnerabilities in the target library.
 - **medium**: Memory disclosure, limited DoS, requires user interaction or specific conditions.
 - **low**: Hardening issues, minor information leaks, best-practice violations with low impact.
 - **info**: Informational observations, code quality issues, theoretical concerns.
+"""
 
+_WORKSPACE_LAYOUT = """\
 ## Workspace Layout
 All source code for the target is located at /workspace/<target_name>/.
 Use `list_directory`, `read_file`, and `search_code` to explore the codebase.
 """
 
-    lang = target.language.lower() if target.language else ""
-    if lang == "c":
-        prompt += """
+_C_HINTS = """\
+## C-Specific Notes
+- Use `bash` for multi-file builds (e.g. `gcc -fsanitize=address,undefined *.c -o target`).
+  The `compile` tool is for single translation units only.
+- Use `run_fuzzer` to launch AFL++ or libFuzzer — do not use `bash` to run `afl-fuzz` or
+  the fuzz binary directly. `bash` has a 30-second hard timeout; fuzzing via `bash` will
+  always time out before finding anything.
+"""
+
+_C_DISCOVERY_HINTS = """\
 ## C-Specific Focus Areas
 - Unchecked buffer operations: `strcpy`, `sprintf`, `gets`, `strcat` without bounds checks.
 - Integer overflows and truncations in size calculations passed to `malloc`/`memcpy`.
@@ -67,8 +93,8 @@ Use `list_directory`, `read_file`, and `search_code` to explore the codebase.
   the fuzz binary directly. `bash` has a 30-second hard timeout; fuzzing via `bash` will
   always time out before finding anything.
 """
-    elif lang == "cpp":
-        prompt += """
+
+_CPP_DISCOVERY_HINTS = """\
 ## C++-Specific Focus Areas
 - C-style buffer misuse in C++ code: unsafe pointer arithmetic, raw array overflows.
 - Iterator invalidation: modifying containers while iterating.
@@ -77,6 +103,41 @@ Use `list_directory`, `read_file`, and `search_code` to explore the codebase.
 - Uninitialized memory in STL containers or placement new.
 - Virtual dispatch on partially-constructed or partially-destroyed objects.
 """
+
+
+def _is_poc_mode(target: TargetSpec) -> bool:
+    return bool(target.attack_surface_hint)
+
+
+def build_system_prompt(target: TargetSpec) -> str:
+    """Return the system prompt. PoC mode when attack_surface_hint is set; discovery otherwise."""
+    lang = target.language.lower() if target.language else ""
+
+    if _is_poc_mode(target):
+        prompt = (
+            "You are an autonomous C/C++ exploit developer. You have been given a known "
+            "vulnerability with a detailed attack surface description. Your mission is to "
+            "write a working proof-of-concept (PoC) that reproduces the crash and confirms "
+            "exploitability. You are not conducting a general security audit — stay focused "
+            "on reproducing the specific vulnerability described.\n\n"
+        )
+        prompt += _POC_MODE_RULES
+        prompt += _SEVERITY_GUIDE
+        prompt += _WORKSPACE_LAYOUT
+        if lang in ("c", "cpp"):
+            prompt += _C_HINTS
+    else:
+        prompt = (
+            "You are an autonomous C/C++ vulnerability scanner. Your mission is to find real, "
+            "exploitable security vulnerabilities in the target library.\n\n"
+        )
+        prompt += _DISCOVERY_MODE_RULES
+        prompt += _SEVERITY_GUIDE
+        prompt += _WORKSPACE_LAYOUT
+        if lang == "c":
+            prompt += _C_DISCOVERY_HINTS
+        elif lang == "cpp":
+            prompt += _CPP_DISCOVERY_HINTS
 
     return prompt
 
@@ -90,9 +151,18 @@ def build_initial_user_message(target: TargetSpec, workspace_path: str) -> str:
     ]
 
     if target.description:
-        lines.append(f"\n**Description**: {target.description}")
+        lines.append(f"\n**Vulnerability**: {target.description}")
 
-    if target.attack_surface_hint:
+    if _is_poc_mode(target):
+        lines.append(
+            f"\n**Attack surface**: {target.attack_surface_hint}\n"
+            "Reproduce this specific vulnerability. Read the vulnerable source, write a "
+            "standalone PoC at `/workspace/poc.c` (or `.cpp`), build with ASAN, run it, "
+            "and confirm the crash. Record the ASAN output and the PoC file path in "
+            "`emit_finding`."
+        )
+    elif target.attack_surface_hint:
+        # Fallback — should not be reached given _is_poc_mode, kept for clarity
         lines.append(
             f"\n**Mandatory attack surface checklist**: {target.attack_surface_hint}\n"
             "You must investigate every item listed above. For each one, you must either "
@@ -105,16 +175,26 @@ def build_initial_user_message(target: TargetSpec, workspace_path: str) -> str:
     if target.build_hint:
         lines.append(f"\n**Build hint**: {target.build_hint}")
 
-    lines.append(
-        "\n---\n"
-        "Begin your security assessment now. Use `think` to plan your approach, "
-        "then systematically explore the codebase. "
-        "**Call `emit_finding` immediately each time you confirm a vulnerability** — "
-        "do not save them up for the end. You have a limited iteration budget. "
-        "**Report each confirmed vulnerability with `emit_finding` immediately — "
-        "do not wait for fuzzing to complete before reporting. "
-        "Aim to run at least one fuzzer session during the scan, but confirmed findings "
-        "must never be held back waiting for a fuzzer result.**"
-    )
+    if _is_poc_mode(target):
+        lines.append(
+            "\n---\n"
+            "Begin now. Use `think` to plan your approach, then read the vulnerable source, "
+            "write the PoC, build and run it. "
+            "**Call `emit_finding` as soon as the crash is confirmed** — include the PoC "
+            "file path in `poc_file` and paste the ASAN crash output into `description`. "
+            "You have a limited iteration budget — do not defer reporting."
+        )
+    else:
+        lines.append(
+            "\n---\n"
+            "Begin your security assessment now. Use `think` to plan your approach, "
+            "then systematically explore the codebase. "
+            "**Call `emit_finding` immediately each time you confirm a vulnerability** — "
+            "do not save them up for the end. You have a limited iteration budget. "
+            "**Report each confirmed vulnerability with `emit_finding` immediately — "
+            "do not wait for fuzzing to complete before reporting. "
+            "Aim to run at least one fuzzer session during the scan, but confirmed findings "
+            "must never be held back waiting for a fuzzer result.**"
+        )
 
     return "\n".join(lines)
