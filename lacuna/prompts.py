@@ -11,8 +11,8 @@ _POC_MODE_RULES = """\
 - **Call `emit_finding` as soon as the PoC reproduces the crash.** Include the sandbox path
   to the PoC file in the `poc_file` field. Do not defer — if you run out of iterations
   without calling `emit_finding`, the confirmed reproduction is lost.
-- Write the PoC as a standalone C/C++ file (e.g. `/workspace/poc.c`). It must compile and
-  crash with AddressSanitizer when run against the vulnerable version.
+- Write the PoC as a standalone C/C++ file at `/workspace/{target_name}/poc.c` (or `.cpp`).
+  It must compile and crash with AddressSanitizer when run against the vulnerable version.
 - Build the target using the exact steps in the build hint. Use ASAN and UBSAN flags as
   specified. Do not invent build steps — follow the hint, then debug if the build fails.
 - After reproducing the crash, record the exact ASAN output in the finding description.
@@ -121,7 +121,7 @@ def build_system_prompt(target: TargetSpec) -> str:
             "exploitability. You are not conducting a general security audit — stay focused "
             "on reproducing the specific vulnerability described.\n\n"
         )
-        prompt += _POC_MODE_RULES
+        prompt += _POC_MODE_RULES.replace("{target_name}", target.name)
         prompt += _SEVERITY_GUIDE
         prompt += _WORKSPACE_LAYOUT
         if lang in ("c", "cpp"):
@@ -157,7 +157,7 @@ def build_initial_user_message(target: TargetSpec, workspace_path: str) -> str:
         lines.append(
             f"\n**Attack surface**: {target.attack_surface_hint}\n"
             "Reproduce this specific vulnerability. Read the vulnerable source, write a "
-            "standalone PoC at `/workspace/poc.c` (or `.cpp`), build with ASAN, run it, "
+            f"standalone PoC at `/workspace/{target.name}/poc.c` (or `.cpp`), build with ASAN, run it, "
             "and confirm the crash. Record the ASAN output and the PoC file path in "
             "`emit_finding`."
         )

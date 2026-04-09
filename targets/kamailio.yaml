@@ -1,0 +1,22 @@
+# Lacuna target handoff — Kamailio CVE-2026-39864
+name: kamailio
+version: 6.0.4
+language: c
+source:
+  type: git
+  url: https://github.com/kamailio/kamailio
+  ref: 6.0.4
+description: Out-of-bounds read in auth module during user identity checks with non-database backend
+attack_surface_hint: |
+  Kamailio auth module (modules/auth/) processes SIP REGISTER/INVITE requests with credentials.
+  Vulnerability occurs in post-authentication identity verification when using auth without database backend.
+  Trigger: SIP packet with valid credentials + successful auth without DB + subsequent identity check.
+  Target functions likely in auth.c or auth_mod.c handling digest/basic auth and subsequent checks.
+  CWE-125 OOB read causes process crash (DoS).
+build_hint: |
+  git clone https://github.com/kamailio/kamailio
+  git checkout 6.0.4
+  make cfg
+  make -j$(nproc) CFLAGS="-fsanitize=address,undefined -g"
+  Binary: src/kamailio
+  Fuzz input: SIP REGISTER/INVITE packets via UDP/TCP on port 5060 or via direct library API

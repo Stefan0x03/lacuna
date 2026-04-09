@@ -45,6 +45,10 @@ def _budget_text(remaining: int, max_iterations: int) -> str:
 _RATE_LIMIT_RETRIES = 3
 _RATE_LIMIT_BASE_WAIT = 60  # seconds
 
+# Retries for transient 500 server errors. Short waits — these usually clear in seconds.
+_SERVER_ERROR_RETRIES = 3
+_SERVER_ERROR_BASE_WAIT = 5  # seconds
+
 
 class VulnerabilityAgent:
     def __init__(self, config: ScanConfig, sandbox: DockerSandbox) -> None:
@@ -71,8 +75,11 @@ class VulnerabilityAgent:
         tool_defs: list[dict],
     ) -> anthropic.types.Message:
         """Call the API with agent-level rate-limit retry (long waits, respects Retry-After)."""
-        wait = _RATE_LIMIT_BASE_WAIT
-        for attempt in range(_RATE_LIMIT_RETRIES + 1):
+        rate_wait = _RATE_LIMIT_BASE_WAIT
+        server_error_wait = _SERVER_ERROR_BASE_WAIT
+        rate_attempts = 0
+        server_error_attempts = 0
+        while True:
             try:
                 return self._client.messages.create(
                     model=self._config.model,
@@ -82,7 +89,7 @@ class VulnerabilityAgent:
                     tools=tool_defs,
                 )
             except anthropic.RateLimitError as e:
-                if attempt >= _RATE_LIMIT_RETRIES:
+                if rate_attempts >= _RATE_LIMIT_RETRIES:
                     raise
                 # Respect Retry-After without the SDK's 60s cap.
                 try:
@@ -96,19 +103,29 @@ class VulnerabilityAgent:
                             # retry-after-ms is in milliseconds
                             if resp.headers.get("retry-after-ms"):
                                 parsed /= 1000
-                            wait = max(parsed, _RATE_LIMIT_BASE_WAIT)
+                            rate_wait = max(parsed, _RATE_LIMIT_BASE_WAIT)
                 except (TypeError, ValueError):
                     pass
-                wait = min(wait, 600)  # never wait more than 10 minutes
+                rate_wait = min(rate_wait, 600)  # never wait more than 10 minutes
+                rate_attempts += 1
                 print(
-                    f"[lacuna] Rate limited — waiting {wait:.0f}s "
-                    f"(attempt {attempt + 1}/{_RATE_LIMIT_RETRIES})...",
+                    f"[lacuna] Rate limited — waiting {rate_wait:.0f}s "
+                    f"(attempt {rate_attempts}/{_RATE_LIMIT_RETRIES})...",
                     file=sys.stderr,
                 )
-                time.sleep(wait)
-                wait = min(wait * 2, 600)
-
-        raise RuntimeError("unreachable")  # loop always returns or raises
+                time.sleep(rate_wait)
+                rate_wait = min(rate_wait * 2, 600)
+            except anthropic.InternalServerError:
+                if server_error_attempts >= _SERVER_ERROR_RETRIES:
+                    raise
+                server_error_attempts += 1
+                print(
+                    f"[lacuna] Server error (500) — waiting {server_error_wait}s "
+                    f"(attempt {server_error_attempts}/{_SERVER_ERROR_RETRIES})...",
+                    file=sys.stderr,
+                )
+                time.sleep(server_error_wait)
+                server_error_wait = min(server_error_wait * 2, 60)
 
     def scan(self) -> ScanResult:
         """Run the vulnerability scan and return a ScanResult."""

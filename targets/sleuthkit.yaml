@@ -1,0 +1,32 @@
+# Fissure handoff — Lacuna target spec
+name: sleuthkit
+version: 4.14.0
+language: cpp
+source:
+  type: git
+  url: https://github.com/sleuthkit/sleuthkit
+  ref: sleuthkit-4.14.0
+description: Out-of-bounds read in APFS filesystem keybag parser
+attack_surface_hint: |
+  The wrapped_key_parser class in the APFS keybag parser follows attacker-controlled 
+  length fields without bounds checking, causing heap reads past allocated buffer.
+  
+  Vulnerability location: APFS keybag parsing code in tsk/fs/apfs.c
+  Vulnerable class: wrapped_key_parser
+  Root cause: Missing bounds validation when parsing variable-length key structures
+  
+  Attack vector: Malicious APFS filesystem image crafted with oversized length fields
+  Entry points: fsstat, fls, and other TSK tools that parse APFS volumes
+  
+  Crash signature: Heap buffer over-read detected by ASAN during keybag structure parsing
+build_hint: |
+  ./configure --enable-shared --disable-static
+  make CFLAGS="-fsanitize=address,fuzzer-no-link -g -O1" CXXFLAGS="-fsanitize=address,fuzzer-no-link -g -O1"
+  
+  OR (for CMake builds if available):
+  cmake -DCMAKE_C_FLAGS="-fsanitize=address,fuzzer-no-link -g -O1" \
+        -DCMAKE_CXX_FLAGS="-fsanitize=address,fuzzer-no-link -g -O1"
+  cmake --build .
+  
+  Harness target: libtsk_img library (APFS image parsing) or embed tsk_img_open() 
+  in custom fuzzer harness that feeds mutated APFS images from libFuzzer input buffer
