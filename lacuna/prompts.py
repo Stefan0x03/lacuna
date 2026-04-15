@@ -8,14 +8,28 @@ _POC_MODE_RULES = """\
   (3–5 sentences). Do not write out execution plans in full — just note the next step.
 - **Your goal is a working PoC, not a survey.** Stay focused on the target vulnerability
   described in the attack surface hint. Do not report unrelated bugs you encounter.
+- **Before writing any code, read the actual vulnerable function in the source.** Understand
+  the real function signature, call path, and data structures before writing the PoC.
+- **Your PoC must call into the target library's actual compiled code.** In order of
+  preference: (1) link against the compiled library, (2) `#include` the target's source
+  files directly and compile them together with the PoC. Only fall back to option 2 if
+  linking proves infeasible after two genuine attempts. Do NOT reimplement the vulnerable
+  logic yourself — a reimplementation only confirms the pattern is buggy in theory, not
+  that the actual library is vulnerable.
 - **Call `emit_finding` as soon as the PoC reproduces the crash.** Include the sandbox path
   to the PoC file in the `poc_file` field. Do not defer — if you run out of iterations
   without calling `emit_finding`, the confirmed reproduction is lost.
-- Write the PoC as a standalone C/C++ file at `/workspace/{target_name}/poc.c` (or `.cpp`).
+- A PoC that links against the real library and crashes, even with a less-than-ideal trigger,
+  is worth more than a polished standalone simulation. Report early, refine later.
+- Write the PoC at `/workspace/{target_name}/poc.c` (or `.cpp`).
   It must compile and crash with AddressSanitizer when run against the vulnerable version.
 - Build the target using the exact steps in the build hint. Use ASAN and UBSAN flags as
   specified. Do not invent build steps — follow the hint, then debug if the build fails.
-- After reproducing the crash, record the exact ASAN output in the finding description.
+- After reproducing the crash, paste the **literal terminal output** from running the PoC
+  into the finding description. Do not describe, summarize, or reconstruct what the output
+  would look like — only real output from actually running the binary is acceptable.
+  Also paste the full PoC source into the `poc_code` field of `emit_finding` so it appears
+  in the report — do not leave `poc_code` empty.
 - **Batch independent operations into a single response** to conserve your iteration budget.
   Writing the PoC with `write_file`, compiling with `bash`, and running with `bash` are
   independent of each other once the build is ready — issue as many non-dependent calls
@@ -178,10 +192,12 @@ def build_initial_user_message(target: TargetSpec, workspace_path: str) -> str:
     if _is_poc_mode(target):
         lines.append(
             "\n---\n"
-            "Begin now. Use `think` to plan your approach, then read the vulnerable source, "
-            "write the PoC, build and run it. "
+            "Begin now. Use `think` to plan your approach, then **read the actual vulnerable "
+            "function in the source before writing any code**. Your PoC must link against or "
+            "include the target's real compiled code — do not reimplement the vulnerable logic. "
             "**Call `emit_finding` as soon as the crash is confirmed** — include the PoC "
-            "file path in `poc_file` and paste the ASAN crash output into `description`. "
+            "file path in `poc_file`, paste the full PoC source into `poc_code`, and paste "
+            "the **literal terminal output** from running the binary into `description`. "
             "You have a limited iteration budget — do not defer reporting."
         )
     else:

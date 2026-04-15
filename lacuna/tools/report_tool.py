@@ -16,6 +16,7 @@ class Finding:
     recommendation: str = ""
     cwe: str = ""
     poc_file: str = ""
+    poc_code: str = ""
 
 
 class EmitFindingTool(BaseTool):
@@ -61,6 +62,10 @@ class EmitFindingTool(BaseTool):
                     "type": "string",
                     "description": "Sandbox path to the PoC file that reproduces the vulnerability, e.g. /workspace/poc.c.",
                 },
+                "poc_code": {
+                    "type": "string",
+                    "description": "Full source code of the working PoC. Paste the entire file contents here so they appear in the report.",
+                },
             },
             "required": ["title", "severity", "description"],
         }
@@ -84,6 +89,7 @@ class EmitFindingTool(BaseTool):
                 recommendation=input.get("recommendation", ""),
                 cwe=input.get("cwe", ""),
                 poc_file=input.get("poc_file", ""),
+                poc_code=input.get("poc_code", ""),
             )
             self._findings.append(finding)
             return ToolResult(content=f"Finding recorded: [{severity.upper()}] {finding.title}")

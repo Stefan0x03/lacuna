@@ -86,6 +86,13 @@ def render_markdown(
             if finding.poc_file:
                 lines.append("")
                 lines.append(f"**PoC**: `{finding.poc_file}`")
+            if finding.poc_code:
+                lines.append("")
+                lines.append("**PoC Source**:")
+                lines.append("")
+                lines.append("```c")
+                lines.append(finding.poc_code)
+                lines.append("```")
             if finding.recommendation:
                 lines.append("")
                 lines.append(f"**Recommendation**: {finding.recommendation}")
@@ -162,6 +169,7 @@ def extract_findings_from_messages(messages: list[dict]) -> list[Finding]:
                     recommendation=inp.get("recommendation", ""),
                     cwe=inp.get("cwe", ""),
                     poc_file=inp.get("poc_file", ""),
+                    poc_code=inp.get("poc_code", ""),
                 )
             )
     return findings
