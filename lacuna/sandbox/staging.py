@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import tarfile
@@ -10,6 +11,47 @@ import zipfile
 from pathlib import Path
 
 from lacuna.config import TargetSpec
+
+
+def _validate_no_escaping_symlinks(root: Path) -> None:
+    """
+    Walk the staged directory tree and reject any symlinks that point outside root.
+    
+    This prevents an attacker from using symlinks to exfiltrate host files by having
+    the staging process dereference them. We allow internal symlinks (within the tree)
+    but reject any that escape to parent directories or absolute paths outside root.
+    
+    Raises RuntimeError if a dangerous symlink is found.
+    """
+    root_resolved = root.resolve()
+    
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        current = Path(dirpath)
+        
+        # Check symlinks in both directories and files
+        for name in dirnames + filenames:
+            path = current / name
+            
+            if path.is_symlink():
+                # Get the raw symlink target (not resolved)
+                target = os.readlink(path)
+                
+                # Resolve the symlink relative to its containing directory
+                # This handles both relative and absolute symlink targets
+                if os.path.isabs(target):
+                    target_resolved = Path(target).resolve()
+                else:
+                    target_resolved = (path.parent / target).resolve()
+                
+                # Check if the resolved target escapes the root directory
+                try:
+                    target_resolved.relative_to(root_resolved)
+                except ValueError:
+                    # relative_to() raises ValueError if target is not under root
+                    raise RuntimeError(
+                        f"Rejected dangerous symlink: {path.relative_to(root)} -> {target}\n"
+                        f"Symlinks must not point outside the source tree."
+                    )
 
 
 def stage_target(spec: TargetSpec, workspace_dir: Path) -> Path:
@@ -34,6 +76,10 @@ def stage_target(spec: TargetSpec, workspace_dir: Path) -> Path:
     else:
         raise ValueError(f"unsupported source type: {source_type!r}")
 
+    # Validate that no symlinks escape the staged directory
+    # This prevents exfiltration of host files via symlink dereferencing
+    _validate_no_escaping_symlinks(dst)
+
     return dst
 
 
@@ -43,7 +89,9 @@ def _stage_local(spec: TargetSpec, dst: Path) -> None:
         raise RuntimeError(f"local source path does not exist: {src}")
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(src, dst)
+    # Preserve symlinks without dereferencing them (symlinks=True)
+    # Validation happens in stage_target() after copying
+    shutil.copytree(src, dst, symlinks=True)
 
 
 def _stage_git(spec: TargetSpec, dst: Path) -> None:
@@ -100,4 +148,6 @@ def _stage_tarball(spec: TargetSpec, dst: Path) -> None:
 
         if dst.exists():
             shutil.rmtree(dst)
-        shutil.copytree(extracted_root, dst)
+        # Preserve symlinks without dereferencing them (symlinks=True)
+        # Validation happens in stage_target() after copying
+        shutil.copytree(extracted_root, dst, symlinks=True)

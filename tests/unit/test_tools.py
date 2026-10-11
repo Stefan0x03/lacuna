@@ -235,6 +235,62 @@ def test_stage_target_unsupported_type(tmp_path: Path):
         stage_target(spec, tmp_path / "workspace")
 
 
+def test_stage_target_rejects_escaping_symlink(tmp_path: Path):
+    """Test that symlinks pointing outside the source tree are rejected."""
+    import os
+
+    from lacuna.config import SourceSpec, TargetSpec
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.c").write_text("int main(void){return 0;}")
+    
+    # Create a symlink that points outside the source tree
+    sensitive_file = tmp_path / "sensitive.txt"
+    sensitive_file.write_text("SECRET_DATA")
+    os.symlink(str(sensitive_file), str(src / "loot"))
+
+    workspace = tmp_path / "workspace"
+    spec = TargetSpec(
+        name="mylib",
+        version="1.0",
+        source=SourceSpec(type="local", path=str(src)),
+        language="c",
+    )
+
+    with pytest.raises(RuntimeError, match="Rejected dangerous symlink"):
+        stage_target(spec, workspace)
+
+
+def test_stage_target_allows_internal_symlink(tmp_path: Path):
+    """Test that symlinks within the source tree are allowed."""
+    import os
+
+    from lacuna.config import SourceSpec, TargetSpec
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.c").write_text("int main(void){return 0;}")
+    
+    # Create a symlink that points to a file within the source tree
+    os.symlink("main.c", str(src / "link_to_main.c"))
+
+    workspace = tmp_path / "workspace"
+    spec = TargetSpec(
+        name="mylib",
+        version="1.0",
+        source=SourceSpec(type="local", path=str(src)),
+        language="c",
+    )
+
+    dst = stage_target(spec, workspace)
+    
+    # Should succeed and preserve the symlink
+    assert dst.exists()
+    assert (dst / "link_to_main.c").is_symlink()
+    assert (dst / "link_to_main.c").resolve().name == "main.c"
+
+
 # ===========================================================================
 # Helpers shared by tool tests
 # ===========================================================================
