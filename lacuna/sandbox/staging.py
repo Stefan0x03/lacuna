@@ -63,7 +63,18 @@ def stage_target(spec: TargetSpec, workspace_dir: Path) -> Path:
     Raises ValueError for unsupported source types.
     """
     workspace_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Defense-in-depth: validate that the destination path is contained within workspace_dir
+    # This should never fail if load_target_spec() validated the name, but provides
+    # an additional safety check in case the TargetSpec was constructed directly.
     dst = workspace_dir / spec.name
+    try:
+        dst.resolve().relative_to(workspace_dir.resolve())
+    except ValueError:
+        raise RuntimeError(
+            f"Target name {spec.name!r} would escape workspace directory {workspace_dir}. "
+            "This indicates a path traversal attempt or invalid target specification."
+        )
 
     source_type = spec.source.type
 
