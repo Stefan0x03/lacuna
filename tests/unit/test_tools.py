@@ -291,6 +291,50 @@ def test_stage_target_allows_internal_symlink(tmp_path: Path):
     assert (dst / "link_to_main.c").resolve().name == "main.c"
 
 
+def test_stage_target_defense_in_depth_absolute_path(tmp_path: Path):
+    """Test that stage_target rejects absolute paths even if TargetSpec was constructed directly."""
+    from lacuna.config import SourceSpec, TargetSpec
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.c").write_text("int main(void){return 0;}")
+
+    workspace = tmp_path / "workspace"
+    
+    # Construct a TargetSpec directly with a malicious name (bypassing load_target_spec validation)
+    spec = TargetSpec(
+        name="/etc/passwd",
+        version="1.0",
+        source=SourceSpec(type="local", path=str(src)),
+        language="c",
+    )
+
+    with pytest.raises(RuntimeError, match="would escape workspace directory"):
+        stage_target(spec, workspace)
+
+
+def test_stage_target_defense_in_depth_parent_traversal(tmp_path: Path):
+    """Test that stage_target rejects parent traversal even if TargetSpec was constructed directly."""
+    from lacuna.config import SourceSpec, TargetSpec
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.c").write_text("int main(void){return 0;}")
+
+    workspace = tmp_path / "workspace"
+    
+    # Construct a TargetSpec directly with a malicious name (bypassing load_target_spec validation)
+    spec = TargetSpec(
+        name="../../../etc/passwd",
+        version="1.0",
+        source=SourceSpec(type="local", path=str(src)),
+        language="c",
+    )
+
+    with pytest.raises(RuntimeError, match="would escape workspace directory"):
+        stage_target(spec, workspace)
+
+
 # ===========================================================================
 # Helpers shared by tool tests
 # ===========================================================================

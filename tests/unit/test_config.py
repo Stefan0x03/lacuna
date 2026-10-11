@@ -102,3 +102,123 @@ def test_load_target_spec_local(tmp_path: Path):
     assert spec.source.type == "local"
     assert spec.source.path == "/tmp/mylib"
     assert spec.language == "cpp"
+
+
+def test_load_target_spec_rejects_absolute_path(tmp_path: Path):
+    """Test that absolute paths in target name are rejected."""
+    yaml_data = {
+        "name": "/etc/passwd",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot be an absolute path"):
+        load_target_spec(yaml_file)
+
+
+def test_load_target_spec_rejects_parent_traversal(tmp_path: Path):
+    """Test that parent directory traversal in target name is rejected."""
+    yaml_data = {
+        "name": "../../etc/passwd",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot contain path separators"):
+        load_target_spec(yaml_file)
+
+
+def test_load_target_spec_rejects_dotdot(tmp_path: Path):
+    """Test that '..' as target name is rejected."""
+    yaml_data = {
+        "name": "..",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot be '.' or '..'"):
+        load_target_spec(yaml_file)
+
+
+def test_load_target_spec_rejects_dot(tmp_path: Path):
+    """Test that '.' as target name is rejected."""
+    yaml_data = {
+        "name": ".",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot be '.' or '..'"):
+        load_target_spec(yaml_file)
+
+
+def test_load_target_spec_rejects_path_with_slash(tmp_path: Path):
+    """Test that target names with slashes are rejected."""
+    yaml_data = {
+        "name": "foo/bar",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot contain path separators"):
+        load_target_spec(yaml_file)
+
+
+def test_load_target_spec_rejects_path_with_backslash(tmp_path: Path):
+    """Test that target names with backslashes are rejected."""
+    yaml_data = {
+        "name": "foo\\bar",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot contain path separators"):
+        load_target_spec(yaml_file)
+
+
+def test_load_target_spec_rejects_empty_name(tmp_path: Path):
+    """Test that empty target name is rejected."""
+    yaml_data = {
+        "name": "",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        load_target_spec(yaml_file)
+
+
+def test_load_target_spec_rejects_null_byte(tmp_path: Path):
+    """Test that target names with null bytes are rejected."""
+    yaml_data = {
+        "name": "foo\x00bar",
+        "version": "1.0.0",
+        "source": {"type": "local", "path": "/tmp/test"},
+        "language": "c",
+    }
+    yaml_file = tmp_path / "malicious.yaml"
+    yaml_file.write_text(yaml.dump(yaml_data))
+
+    with pytest.raises(ValueError, match="cannot contain null bytes"):
+        load_target_spec(yaml_file)

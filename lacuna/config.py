@@ -10,6 +10,61 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _validate_target_name(name: str) -> None:
+    """
+    Validate that a target name is safe for use as a filesystem path component.
+    
+    Ensures the name:
+    - Is not empty
+    - Is not an absolute path
+    - Does not contain parent directory references (..)
+    - Does not contain null bytes or path separators
+    - Resolves to a path within the intended parent directory
+    
+    Raises ValueError with a descriptive message if validation fails.
+    """
+    if not name:
+        raise ValueError("target name cannot be empty")
+    
+    if "\x00" in name:
+        raise ValueError("target name cannot contain null bytes")
+    
+    # Check for absolute paths
+    if os.path.isabs(name):
+        raise ValueError(
+            f"target name cannot be an absolute path: {name!r}\n"
+            "Target names must be simple directory names without path separators."
+        )
+    
+    # Check for path separators (both Unix and Windows)
+    if "/" in name or "\\" in name:
+        raise ValueError(
+            f"target name cannot contain path separators: {name!r}\n"
+            "Target names must be simple directory names."
+        )
+    
+    # Check for parent directory references
+    if name == ".." or name == ".":
+        raise ValueError(
+            f"target name cannot be '.' or '..': {name!r}\n"
+            "Target names must be simple directory names."
+        )
+    
+    # Additional safety check: ensure the resolved path stays within parent
+    # This catches edge cases like symlink attacks or OS-specific path handling
+    try:
+        test_parent = Path("/tmp/test_workspace")
+        test_path = test_parent / name
+        # resolve() will normalize the path and follow symlinks
+        # relative_to() will raise ValueError if test_path escapes test_parent
+        test_path.resolve().relative_to(test_parent.resolve())
+    except (ValueError, RuntimeError) as e:
+        raise ValueError(
+            f"target name would escape workspace directory: {name!r}\n"
+            f"Validation error: {e}"
+        )
+
+
 @dataclass
 class SourceSpec:
     type: str  # "git" | "tarball" | "local"
@@ -48,6 +103,10 @@ def load_target_spec(path: Path) -> TargetSpec:
     with path.open() as f:
         data = yaml.safe_load(f)
 
+    # Validate the target name before using it
+    name = data["name"]
+    _validate_target_name(name)
+
     source_data = data["source"]
     source = SourceSpec(
         type=source_data["type"],
@@ -57,7 +116,7 @@ def load_target_spec(path: Path) -> TargetSpec:
     )
 
     return TargetSpec(
-        name=data["name"],
+        name=name,
         version=str(data["version"]),
         source=source,
         language=data["language"],
